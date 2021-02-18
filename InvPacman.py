@@ -54,52 +54,55 @@ class BFS_cheby():
     # Create lists for open nodes and closed nodes
     open = []
     closed = []
+   
+
     # Create a start node and an goal node
-    start_node = Node((1, 1), None)
-    goal_node = Node((3,3), None)
+    start_node = Node(start, None)
+    goal_node = Node(end, None)
     # Add the start node
     open.append(start_node)
     
     # Loop until the open list is empty
     while len(open) > 0:
-        # Sort the open list to get the node with the lowest cost first
         open.sort()
         # Get the node with the lowest cost
         current_node = open.pop(0)
         closed.append(current_node)
-        
-        # Check if we have reached the goal, return the path
         if current_node == goal_node:
             path = []
             while current_node != start_node:
                 path.append(current_node.position)
                 current_node = current_node.parent
-            #path.append(start) 
-            # Return reversed path
+            
             return path[::-1]
-        # Unzip the current node position
+        
         (x, y) = current_node.position
         # Get neighbors
-        neighbors = [(x-1, y), (x+1, y), (x, y-1), (x, y+1)]
+        neighbors = self.map[current_node.position]["neighboor"]
+       
+        print(neighbors)
         # Loop neighbors
         for next in neighbors:
             # Get value from map
-            map_value = self.map.get(next)
+            print(type(next))
+            print(next.position)
+            map_value = self.map.get(next.position)
             # Check if the node is a wall
             if(map_value == '='):
                 continue
             # Create a neighbor node
-            neighbor = Node(next, current_node)
+            neighbor = Node(next.position, current_node)
+
             # Check if the neighbor is in the closed list
             if(neighbor in closed):
                 continue
-            
-            neighbor.g = abs(neighbor.position[0] - start_node.position[0]) + abs(neighbor.position[1] - start_node.position[1])
-            neighbor.h = abs(neighbor.position[0] - goal_node.position[0]) + abs(neighbor.position[1] - goal_node.position[1])
+            print(neighbor.position[0])
+            neighbor.g = max(abs(neighbor.position[0] - start_node.position[0]), abs(neighbor.position[1] - start_node.position[1]))
+            neighbor.h = max(abs(neighbor.position[0] - goal_node.position[0]), abs(neighbor.position[1] - goal_node.position[1]))
             neighbor.f = neighbor.h
            
             if(add_to_open(open, neighbor) == True):
-                # Everything is green, add neighbor to open list
+               
                 open.append(neighbor)
     # Return None, no path is found
     return None
@@ -119,17 +122,18 @@ class GroupGhost():
     return self
 
   def __next__(self):
-    if self.n <=  len(self.ghost_list):
+    if self.n <  len(self.ghost_list):
       res = self.ghost_list[self.n]
       self.n += 1
       return res  
     else:
       raise StopIteration
   
-  def addToList(self):
-    pass
+  def addToList(self, g):
+    self.ghost_list.append(g)
+    print(len(self.ghost_list))
 
-		
+
 class Map():
   def __init__(self):
     self.char_to_image = {
@@ -144,9 +148,10 @@ class Map():
     self.w = 0
     self.h = 0
     self.food_left = 0
-    
-
-
+    self.map_modal = dict()
+    self.food_map = dict()
+    self.pacman = None
+    self.groupGhost = None
 
   def load_level(self, number):
     file = "level-%s.txt" % number
@@ -155,20 +160,31 @@ class Map():
     with open(file) as f:
       map_tmp = [[b for b in line.strip()] for line in f]
       self.h = len(map_tmp)
-      world = {(i, j):{"signe":b, "neighboor":[Node((i-1, j), None), Node((i, j-1), None), Node((i+1, j), None), Node((i, j+1), None)]} for i, l in enumerate(map_tmp)  for j, b in enumerate(l)}
-      self.food_left = len([b for i, l in enumerate(map_tmp)  for j, b in enumerate(l) if b == "."  ])
-
-
+      self.map_modal = {(i, j):{"signe":b, "neighboor":[Node((i-1, j), None), Node((i, j-1), None), Node((i+1, j), None), Node((i, j+1), None)]} for i, l in enumerate(map_tmp)  for j, b in enumerate(l)}
+      self.food_map = [(i, j) for i, l in enumerate(map_tmp)  for j, b in enumerate(l) if b == "."  ]
+      self.food_left = len(self.food_map)
+      self.groupGhost= GroupGhost()
+      for k, v in self.map_modal.items():
+        if(v["signe"] == "p"):
+          self.pacman = Pacman(k[0], k[1])
+        else:
+          if(v["signe"] == "g" or v["signe"] == "G" or v["signe"] == "h" or v["signe"] == "H"):
+            gosth = Ghost(k[0], k[1], v["signe"])
+            self.groupGhost.addToList(gosth)
+      for g in self.groupGhost:
+        print(g)
           
 
+  def update(self):
+    for g in self.groupGhost:
+      
+      def draw(self, surface):
   
-  def draw(self, surface):
-    
-    for k, v in world.items():
+        for k, v in self.map_modal.items():
         
-      image = self.char_to_image.get(v["signe"], None)
-      if image:
-        surface.blit(pygame.image.load(self.char_to_image[v["signe"]]), (k[0]*30, k[1]*30))
+          image = self.char_to_image.get(v["signe"], None)
+          if image:
+            surface.blit(pygame.image.load(self.char_to_image[v["signe"]]), (k[0]*30, k[1]*30))
 
     # for g in ghosts: g.draw()
     # DISPLAYSURF.draw.text("Score: %s" % pacman.score, topleft=(8, 4), fontsize=40)
@@ -181,13 +197,16 @@ class Map():
 
 
 class Ghost(pygame.sprite.Sprite):
-      def __init__(self):
+      def __init__(self, x, y, signe):
         super().__init__() 
         self.image = pygame.image.load("images/ghost1.png")
         self.surf = pygame.Surface((30, 30))
         self.rect = self.surf.get_rect()
         self.dx = 5
         self.dy = 0
+        self.x = x
+        self.y = y
+        self.signe = signe
         self.rot = 0
         self.prevpos = None
  
@@ -203,10 +222,13 @@ class Ghost(pygame.sprite.Sprite):
       
       def draw(self, surface):
         surface.blit(self.image, self.rect) 
+
+      def __str__(self):  
+        return "From x= %s, y = %s" % (self.x, self.y)  
  
  
 class Pacman(pygame.sprite.Sprite):
-    def __init__(self):
+    def __init__(self, x, y):
         super().__init__() 
         self.image = pygame.image.load("images/pacman_o.png")
         self.surf = pygame.Surface((30, 30))
@@ -216,6 +238,9 @@ class Pacman(pygame.sprite.Sprite):
         self.rot = 0
         self.score = 0
         self.dir = None
+        self.x = x
+        self.y = y
+        self.rect.move_ip(self.x * BLOCK_SIZE, self.y * BLOCK_SIZE)
 
     
     def blocks_ahead_of_pacman(self, dx, dy):
@@ -310,8 +335,8 @@ class Pacman(pygame.sprite.Sprite):
         surface.blit(self.image, self.rect)     
  
          
-P1 = Pacman()
-E1 = Ghost()
+# P1 = Pacman()
+# E1 = Ghost()
 M = Map()
 M.load_level(1)
  
@@ -321,13 +346,11 @@ while True:
             pygame.quit()
             sys.exit()
 
-    P1.update()
-    E1.move()
      
     DISPLAYSURF.fill(BLACK)
+    M.update()
     M.draw(DISPLAYSURF)
-    P1.draw(DISPLAYSURF)
-    E1.draw(DISPLAYSURF)
+    
          
     pygame.display.update()
     FramePerSec.tick(FPS)
